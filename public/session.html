@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Session Gouinche</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <header class="bg-green-700 text-white shadow">
+    <div class="max-w-xl mx-auto px-4 py-4 flex items-center gap-3">
+      <a href="/" class="text-green-300 hover:text-white transition text-sm">← Retour</a>
+      <h1 class="text-xl font-bold">🎯 Gouinche</h1>
+    </div>
+  </header>
+
+  <main class="max-w-xl mx-auto px-4 py-6 space-y-4">
+
+    <!-- Infos session -->
+    <div id="session-info" class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+      <div class="text-gray-400 text-sm">Chargement…</div>
+    </div>
+
+    <!-- Règles -->
+    <div class="bg-blue-50 border border-blue-100 rounded-xl shadow-sm overflow-hidden">
+      <button onclick="this.nextElementSibling.classList.toggle('hidden'); this.querySelector('.chevron').classList.toggle('rotate-180')"
+        class="w-full flex justify-between items-center px-4 py-3 text-sm font-medium text-blue-700 hover:bg-blue-100 transition text-left">
+        <span>ℹ️ Comment ça marche ?</span>
+        <svg class="chevron w-4 h-4 text-blue-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      <div class="hidden px-4 pb-4 space-y-2 text-sm text-blue-800">
+        <p>👥 <strong>S'inscrire en binôme</strong> — entre ton prénom, et celui de ton binôme si tu en as un. Tu peux aussi t'inscrire seul·e et ton binôme sera ajouté plus tard.</p>
+        <p>🔤 <strong>Prénoms uniques</strong> — un même prénom ne peut apparaître qu'une seule fois par session (insensible à la casse).</p>
+        <p>⏳ <strong>Liste d'attente</strong> — si la session est pleine, tu es automatiquement mis·e en attente. Dès qu'une place se libère, la première personne en attente est promue. L'ordre est celui de l'inscription.</p>
+        <p>✏️ <strong>Modifications</strong> — chaque inscription peut être modifiée (changer un prénom, ajouter ou retirer un binôme) directement depuis cette page.</p>
+      </div>
+    </div>
+
+    <!-- Formulaire inscription -->
+    <div id="register-card" class="bg-white rounded-xl border border-gray-100 shadow-sm p-4 hidden">
+      <h2 class="font-semibold text-gray-700 mb-3">S'inscrire</h2>
+      <div class="space-y-3">
+        <input id="p1" type="text" placeholder="Votre prénom *" autocomplete="off"
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+        <input id="p2" type="text" placeholder="Prénom du binôme (optionnel)" autocomplete="off"
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+        <button id="reg-btn" onclick="register()"
+          class="w-full bg-green-700 hover:bg-green-800 text-white font-medium py-2 rounded-lg text-sm transition">
+          S'inscrire
+        </button>
+        <p id="reg-msg" class="text-sm text-center hidden"></p>
+      </div>
+    </div>
+
+    <!-- Liste inscriptions -->
+    <div id="list-card" class="hidden">
+      <h2 class="font-semibold text-gray-500 text-xs uppercase tracking-wide mb-2">Inscriptions confirmées</h2>
+      <div id="confirmed-list" class="space-y-1.5"></div>
+
+      <div id="waitlist-card" class="hidden mt-4">
+        <h2 class="font-semibold text-gray-500 text-xs uppercase tracking-wide mb-2">Liste d'attente</h2>
+        <div id="waitlist-list" class="space-y-1.5"></div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    const sessionId = new URLSearchParams(location.search).get('id');
+    if (!sessionId) location.href = '/';
+
+    function esc(s) {
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function formatDate(d) {
+      return new Date(d + 'T12:00:00').toLocaleDateString('fr-FR', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+      });
+    }
+
+    let sessionData = null;
+
+    async function load() {
+      try {
+        const res = await fetch(`/api/sessions/${sessionId}`);
+        if (!res.ok) { location.href = '/'; return; }
+        sessionData = await res.json();
+        render();
+      } catch {
+        document.getElementById('session-info').innerHTML = '<div class="text-red-400">Erreur de chargement</div>';
+      }
+    }
+
+    function render() {
+      const s = sessionData;
+      const spots = s.max_pairs - s.confirmed_count;
+      const spotsHtml = spots > 0
+        ? `<span class="text-green-700 font-medium">${spots} place${spots > 1 ? 's' : ''} disponible${spots > 1 ? 's' : ''}</span>`
+        : `<span class="text-orange-600 font-medium">Complet</span>`;
+      const waitHtml = s.waitlist_count > 0
+        ? `<span class="text-amber-600"> · ${s.waitlist_count} en attente</span>` : '';
+
+      document.getElementById('session-info').innerHTML = `
+        <p class="font-semibold text-gray-800 capitalize">${esc(formatDate(s.date))}</p>
+        <p class="text-gray-500 text-sm mt-1">🕐 ${esc(s.time)} &nbsp;·&nbsp; 📍 ${esc(s.location)}</p>
+        <p class="text-sm mt-2">${spotsHtml}
+          <span class="text-gray-400"> · ${s.confirmed_count}/${s.max_pairs} binômes${waitHtml}</span>
+        </p>
+      `;
+      document.getElementById('register-card').classList.remove('hidden');
+
+      // Adapter le bouton selon disponibilité
+      const btn = document.getElementById('reg-btn');
+      if (spots <= 0) {
+        btn.textContent = "S'inscrire sur liste d'attente";
+        btn.className = 'w-full bg-amber-400 hover:bg-amber-500 text-white font-medium py-2 rounded-lg text-sm transition';
+      } else {
+        btn.textContent = "S'inscrire";
+        btn.className = 'w-full bg-green-700 hover:bg-green-800 text-white font-medium py-2 rounded-lg text-sm transition';
+      }
+
+      const confirmed = s.registrations.filter(r => r.status === 'confirmed');
+      const waitlist  = s.registrations.filter(r => r.status === 'waitlist');
+
+      if (s.registrations.length) document.getElementById('list-card').classList.remove('hidden');
+
+      document.getElementById('confirmed-list').innerHTML = confirmed.length
+        ? confirmed.map((r, i) => registrationRow(r, i + 1, false)).join('')
+        : '<div class="text-gray-400 text-sm py-1">Aucune inscription confirmée</div>';
+
+      if (waitlist.length) {
+        document.getElementById('waitlist-card').classList.remove('hidden');
+        document.getElementById('waitlist-list').innerHTML = waitlist.map(r => registrationRow(r, r.waitlist_position, true)).join('');
+      } else {
+        document.getElementById('waitlist-card').classList.add('hidden');
+      }
+    }
+
+    // ── Rendu d'une ligne d'inscription ───────────────────────────────────────
+
+    function playerBlock(regId, playerKey, name, hasPartner) {
+      // data-solo="true" si player1 sans partenaire → DELETE à la place de PATCH remove_player1
+      const isSoloPlayer1 = playerKey === 'player1' && !hasPartner;
+      return `
+        <span class="player-block inline-flex items-center gap-1 flex-wrap"
+              data-reg-id="${esc(regId)}"
+              data-player="${playerKey}"
+              data-solo="${isSoloPlayer1}">
+          <!-- mode affichage -->
+          <span class="player-name font-medium text-gray-800 text-sm">${esc(name)}</span>
+          <!-- mode édition (masqué) -->
+          <input class="player-input hidden text-sm border border-blue-300 rounded px-1.5 py-0.5 w-28
+                        focus:outline-none focus:ring-1 focus:ring-blue-400"
+                 value="${esc(name)}" autocomplete="off">
+          <!-- boutons affichage -->
+          <button class="btn-modify text-xs text-blue-400 hover:text-blue-600 transition">modifier</button>
+          <button class="btn-remove text-xs text-red-300 hover:text-red-500 transition">retirer</button>
+          <!-- boutons édition (masqués) -->
+          <button class="btn-save hidden text-xs text-green-700 font-semibold hover:text-green-800 transition">ok</button>
+          <button class="btn-cancel hidden text-xs text-gray-400 hover:text-gray-600 transition">annuler</button>
+          <span class="btn-err hidden text-xs text-red-500"></span>
+        </span>
+      `;
+    }
+
+    function registrationRow(r, pos, isWait) {
+      const bg = isWait ? 'bg-amber-50 border-amber-100' : 'bg-white border-gray-100';
+      const posLabel = isWait ? `<span class="text-amber-400 font-bold">#${pos}</span>` : `<span class="text-gray-300">${pos}.</span>`;
+      const hasPartner = !!r.player2;
+      const who = esc(r.player2 ? `${r.player1} & ${r.player2}` : r.player1);
+
+      return `
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-3 py-2.5 ${bg}">
+          <span class="text-xs w-6 shrink-0">${posLabel}</span>
+          ${playerBlock(r.id, 'player1', r.player1, hasPartner)}
+          ${hasPartner
+            ? `<span class="text-gray-300 text-sm">&amp;</span>${playerBlock(r.id, 'player2', r.player2, hasPartner)}`
+            : `<span class="text-gray-300 text-xs">(solo)</span>${addPartnerBlock(r.id)}`}
+          <button class="btn-del-row ml-auto text-xs text-red-300 hover:text-red-600 border border-red-200
+                         hover:border-red-400 rounded px-1.5 py-0.5 transition shrink-0"
+                  data-reg-id="${esc(r.id)}" data-who="${who}">supprimer</button>
+        </div>
+      `;
+    }
+
+    function addPartnerBlock(regId) {
+      return `
+        <span class="add-partner-block inline-flex items-center gap-1" data-reg-id="${regId}">
+          <button class="btn-add-partner text-xs text-green-500 hover:text-green-700 transition">+ binôme</button>
+          <input class="partner-input hidden text-sm border border-green-300 rounded px-1.5 py-0.5 w-28
+                        focus:outline-none focus:ring-1 focus:ring-green-400"
+                 placeholder="Prénom" autocomplete="off">
+          <button class="btn-save-partner hidden text-xs text-green-700 font-semibold hover:text-green-800 transition">ok</button>
+          <button class="btn-cancel-partner hidden text-xs text-gray-400 hover:text-gray-600 transition">annuler</button>
+          <span class="partner-err hidden text-xs text-red-500"></span>
+        </span>
+      `;
+    }
+
+    // ── Gestion des événements (délégation) ───────────────────────────────────
+
+    document.addEventListener('click', async (e) => {
+      // ── Supprimer toute une inscription ──
+      const delRow = e.target.closest('.btn-del-row');
+      if (delRow) {
+        const who = delRow.dataset.who;
+        if (!confirm(`Supprimer l'inscription de ${who} ?`)) return;
+        await deleteReg(delRow.dataset.regId);
+        return;
+      }
+
+      // ── Ajouter un binôme à une inscription solo ──
+      const addBlock = e.target.closest('.add-partner-block');
+      if (addBlock) {
+        const regId      = addBlock.dataset.regId;
+        const input      = addBlock.querySelector('.partner-input');
+        const btnAdd     = addBlock.querySelector('.btn-add-partner');
+        const btnSave    = addBlock.querySelector('.btn-save-partner');
+        const btnCancel  = addBlock.querySelector('.btn-cancel-partner');
+        const errSpan    = addBlock.querySelector('.partner-err');
+
+        if (e.target === btnAdd) {
+          btnAdd.classList.add('hidden');
+          input.classList.remove('hidden');
+          btnSave.classList.remove('hidden');
+          btnCancel.classList.remove('hidden');
+          input.focus();
+        } else if (e.target === btnCancel) {
+          input.value = '';
+          input.classList.add('hidden');
+          btnSave.classList.add('hidden');
+          btnCancel.classList.add('hidden');
+          btnAdd.classList.remove('hidden');
+          errSpan.classList.add('hidden');
+        } else if (e.target === btnSave) {
+          const name = input.value.trim();
+          if (!name) return;
+          const err = await patchReg(regId, { action: 'update_player2', value: name });
+          if (err) {
+            errSpan.textContent = err;
+            errSpan.classList.remove('hidden');
+            setTimeout(() => errSpan.classList.add('hidden'), 4000);
+          } else {
+            await load();
+          }
+        }
+        return;
+      }
+
+      // ── Actions sur un joueur existant ──
+      const block = e.target.closest('.player-block');
+      if (!block) return;
+
+      const regId  = block.dataset.regId;
+      const player = block.dataset.player;
+      const isSolo = block.dataset.solo === 'true';
+
+      const nameSpan  = block.querySelector('.player-name');
+      const input     = block.querySelector('.player-input');
+      const btnModify = block.querySelector('.btn-modify');
+      const btnRemove = block.querySelector('.btn-remove');
+      const btnSave   = block.querySelector('.btn-save');
+      const btnCancel = block.querySelector('.btn-cancel');
+      const errSpan   = block.querySelector('.btn-err');
+
+      if (e.target === btnModify) {
+        enterEdit(block);
+
+      } else if (e.target === btnCancel) {
+        input.value = nameSpan.textContent;
+        exitEdit(block);
+
+      } else if (e.target === btnSave) {
+        const newName = input.value.trim();
+        if (!newName) return;
+        const action = player === 'player1' ? 'update_player1' : 'update_player2';
+        const err = await patchReg(regId, { action, value: newName });
+        if (err) {
+          errSpan.textContent = err;
+          errSpan.classList.remove('hidden');
+          setTimeout(() => errSpan.classList.add('hidden'), 4000);
+        } else {
+          await load();
+        }
+
+      } else if (e.target === btnRemove) {
+        const name = nameSpan.textContent;
+        let confirmMsg;
+        if (isSolo) {
+          confirmMsg = `Retirer "${name}" ? L'inscription sera supprimée.`;
+        } else if (player === 'player1') {
+          // chercher le nom du player2 dans le même row
+          const row = block.closest('[class*="rounded-lg"]');
+          const p2Block = row.querySelector('[data-player="player2"] .player-name');
+          const partner = p2Block ? p2Block.textContent : 'le binôme';
+          confirmMsg = `Retirer "${name}" ? ${partner} restera inscrit(e) seul(e).`;
+        } else {
+          confirmMsg = `Retirer "${name}" de l'inscription ?`;
+        }
+        if (!confirm(confirmMsg)) return;
+
+        if (isSolo) {
+          await deleteReg(regId);
+        } else {
+          const action = player === 'player1' ? 'remove_player1' : 'remove_player2';
+          await patchReg(regId, { action });
+          await load();
+        }
+      }
+    });
+
+    // Valider l'édition avec Entrée
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const block    = e.target.closest('.player-block');
+      const addBlock = e.target.closest('.add-partner-block');
+      if (block) {
+        const btn = block.querySelector('.btn-save');
+        if (btn && !btn.classList.contains('hidden')) btn.click();
+      } else if (addBlock) {
+        const btn = addBlock.querySelector('.btn-save-partner');
+        if (btn && !btn.classList.contains('hidden')) btn.click();
+      }
+    });
+
+    function enterEdit(block) {
+      block.querySelector('.player-name').classList.add('hidden');
+      block.querySelector('.player-input').classList.remove('hidden');
+      block.querySelector('.btn-modify').classList.add('hidden');
+      block.querySelector('.btn-remove').classList.add('hidden');
+      block.querySelector('.btn-save').classList.remove('hidden');
+      block.querySelector('.btn-cancel').classList.remove('hidden');
+      block.querySelector('.player-input').focus();
+      block.querySelector('.player-input').select();
+    }
+
+    function exitEdit(block) {
+      block.querySelector('.player-name').classList.remove('hidden');
+      block.querySelector('.player-input').classList.add('hidden');
+      block.querySelector('.btn-modify').classList.remove('hidden');
+      block.querySelector('.btn-remove').classList.remove('hidden');
+      block.querySelector('.btn-save').classList.add('hidden');
+      block.querySelector('.btn-cancel').classList.add('hidden');
+      block.querySelector('.btn-err').classList.add('hidden');
+    }
+
+    // ── Helpers API ───────────────────────────────────────────────────────────
+
+    async function patchReg(regId, body) {
+      try {
+        const res = await fetch(`/api/registrations/${regId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        return res.ok ? null : (data.error || 'Erreur');
+      } catch {
+        return 'Erreur de connexion';
+      }
+    }
+
+    async function deleteReg(regId) {
+      try {
+        const res = await fetch(`/api/registrations/${regId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) { alert(data.error || 'Erreur'); return; }
+        await load();
+      } catch {
+        alert('Erreur de connexion');
+      }
+    }
+
+    // ── Inscription ───────────────────────────────────────────────────────────
+
+    async function register() {
+      const p1  = document.getElementById('p1').value.trim();
+      const p2  = document.getElementById('p2').value.trim();
+      const btn = document.getElementById('reg-btn');
+      if (!p1) { showMsg('Veuillez entrer votre prénom', 'red'); return; }
+
+      const isFull = sessionData && sessionData.confirmed_count >= sessionData.max_pairs;
+      btn.disabled = true;
+      btn.textContent = 'Inscription…';
+      try {
+        const res = await fetch(`/api/sessions/${sessionId}/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ player1: p1, player2: p2 || undefined }),
+        });
+        const body = await res.json();
+        if (!res.ok) {
+          showMsg(body.error || 'Erreur', 'red');
+        } else {
+          const txt = body.status_val === 'confirmed'
+            ? '✅ Inscription confirmée !'
+            : `⏳ Liste d'attente — position ${body.position}`;
+          showMsg(txt, body.status_val === 'confirmed' ? 'green' : 'amber');
+          document.getElementById('p1').value = '';
+          document.getElementById('p2').value = '';
+          await load();
+        }
+      } catch {
+        showMsg('Erreur de connexion', 'red');
+      }
+      btn.disabled = false;
+      // load() a déjà mis à jour le bouton si l'inscription a réussi
+      // si erreur, on remet le bon état selon la dispo au moment de la tentative
+      if (btn.textContent === 'Inscription…') {
+        btn.textContent = isFull ? "S'inscrire sur liste d'attente" : "S'inscrire";
+        btn.className = isFull
+          ? 'w-full bg-amber-400 hover:bg-amber-500 text-white font-medium py-2 rounded-lg text-sm transition'
+          : 'w-full bg-green-700 hover:bg-green-800 text-white font-medium py-2 rounded-lg text-sm transition';
+      }
+    }
+
+    function showMsg(text, color) {
+      const el = document.getElementById('reg-msg');
+      el.textContent = text;
+      el.className = 'text-sm text-center ' + { red: 'text-red-500', green: 'text-green-700', amber: 'text-amber-600' }[color];
+      el.classList.remove('hidden');
+      setTimeout(() => el.classList.add('hidden'), 5000);
+    }
+
+    load();
+  </script>
+</body>
+</html>

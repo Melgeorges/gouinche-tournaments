@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gouinche</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <header class="bg-green-700 text-white shadow">
+    <div class="max-w-xl mx-auto px-4 py-4 flex justify-between items-center">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight">🎯 Gouinche</h1>
+        <p class="text-green-200 text-xs mt-0.5">Tournois & inscriptions</p>
+      </div>
+      <a href="/admin.html" class="text-green-300 hover:text-white text-sm transition">Admin →</a>
+    </div>
+  </header>
+
+  <main class="max-w-xl mx-auto px-4 py-6">
+    <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Sessions ouvertes</h2>
+    <div id="sessions">
+      <div class="text-center text-gray-400 py-12">Chargement…</div>
+    </div>
+  </main>
+
+  <script>
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function formatDate(dateStr) {
+      return new Date(dateStr + 'T12:00:00').toLocaleDateString('fr-FR', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+      });
+    }
+
+    async function load() {
+      const container = document.getElementById('sessions');
+      try {
+        const res = await fetch('/api/sessions');
+        const sessions = await res.json();
+
+        if (!sessions.length) {
+          container.innerHTML = '<div class="text-center text-gray-400 py-12">Aucune session disponible pour le moment.</div>';
+          return;
+        }
+
+        container.innerHTML = sessions.map(s => {
+          const spots = s.max_pairs - s.confirmed_count;
+          const full = spots <= 0;
+          const badge = full
+            ? `<span class="text-xs font-medium text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">Complet</span>`
+            : `<span class="text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded-full">${spots} place${spots > 1 ? 's' : ''}</span>`;
+
+          const waitlistNote = s.waitlist_count > 0
+            ? `<span class="text-xs text-amber-600 ml-1">· ${s.waitlist_count} en attente</span>` : '';
+
+          return `
+            <a href="/session.html?id=${esc(s.id)}"
+               class="block bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-green-200 transition p-4 mb-3">
+              <div class="flex justify-between items-start gap-2">
+                <div class="min-w-0">
+                  <p class="font-semibold text-gray-800 capitalize truncate">${esc(formatDate(s.date))}</p>
+                  <p class="text-sm text-gray-500 mt-0.5">🕐 ${esc(s.time)} &nbsp;·&nbsp; 📍 ${esc(s.location)}</p>
+                  <p class="text-xs text-gray-400 mt-1">
+                    ${s.confirmed_count}/${s.max_pairs} binômes${waitlistNote}
+                  </p>
+                </div>
+                <div class="shrink-0">${badge}</div>
+              </div>
+            </a>
+          `;
+        }).join('');
+      } catch {
+        container.innerHTML = '<div class="text-center text-red-400 py-12">Erreur de chargement</div>';
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>
